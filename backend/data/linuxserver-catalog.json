@@ -1,0 +1,165 @@
+[
+  {
+    "catalogId": "firefox",
+    "id": "firefox",
+    "name": "Firefox",
+    "description": "Navegador Firefox con acceso web remoto.",
+    "image": "lscr.io/linuxserver/firefox:latest",
+    "category": "browser",
+    "containerPort": 3000,
+    "protocol": "http",
+    "urlPath": "/",
+    "shmSize": "1gb",
+    "thumbnail": "",
+    "env": {
+      "TZ": "America/Los_Angeles",
+      "PUID": "1000",
+      "PGID": "1000"
+    }
+  },
+  {
+    "catalogId": "chromium",
+    "id": "chromium",
+    "name": "Chromium",
+    "description": "Chromium en navegador para sesiones aisladas.",
+    "image": "lscr.io/linuxserver/chromium:latest",
+    "category": "browser",
+    "containerPort": 3000,
+    "protocol": "http",
+    "urlPath": "/",
+    "shmSize": "1gb",
+    "thumbnail": "",
+    "env": {
+      "TZ": "America/Los_Angeles",
+      "PUID": "1000",
+      "PGID": "1000"
+    }
+  },
+  {
+    "catalogId": "vivaldi",
+    "id": "vivaldi",
+    "name": "Vivaldi",
+    "description": "Navegador Vivaldi con interfaz web remota.",
+    "image": "lscr.io/linuxserver/vivaldi:latest",
+    "category": "browser",
+    "containerPort": 3000,
+    "protocol": "http",
+    "urlPath": "/",
+    "shmSize": "1gb",
+    "thumbnail": "",
+    "env": {
+      "TZ": "America/Los_Angeles",
+      "PUID": "1000",
+      "PGID": "1000"
+    }
+  },
+  {
+    "catalogId": "librewolf",
+    "id": "librewolf",
+    "name": "LibreWolf",
+    "description": "Browser basado en Firefox con enfoque en privacidad.",
+    "image": "lscr.io/linuxserver/librewolf:latest",
+    "category": "browser",
+    "containerPort": 3000,
+    "protocol": "http",
+    "urlPath": "/",
+    "shmSize": "1gb",
+    "thumbnail": "",
+    "env": {
+      "TZ": "America/Los_Angeles",
+      "PUID": "1000",
+      "PGID": "1000"
+    }
+  },
+  {
+    "catalogId": "webtop-ubuntu-kde",
+    "id": "webtop-ubuntu-kde",
+    "name": "Webtop Ubuntu KDE",
+    "description": "Desktop Linux completo en navegador.",
+    "image": "lscr.io/linuxserver/webtop:ubuntu-kde",
+    "category": "desktop",
+    "containerPort": 3000,
+    "protocol": "http",
+    "urlPath": "/",
+    "shmSize": "2gb",
+    "thumbnail": "",
+    "env": {
+      "TZ": "America/Los_Angeles",
+      "PUID": "1000",
+      "PGID": "1000"
+    }
+  },
+  {
+    "catalogId": "webtop-arch",
+    "id": "webtop-arch",
+    "name": "Webtop Arch",
+    "description": "Desktop Linux basado en Arch para entornos mas flexibles.",
+    "image": "lscr.io/linuxserver/webtop:arch",
+    "category": "desktop",
+    "containerPort": 3000,
+    "protocol": "http",
+    "urlPath": "/",
+    "shmSize": "2gb",
+    "thumbnail": "",
+    "env": {
+      "TZ": "America/Los_Angeles",
+      "PUID": "1000",
+      "PGID": "1000"
+    }
+  },
+  {
+    "catalogId": "code-server",
+    "id": "code-server",
+    "name": "Code Server",
+    "description": "VS Code en navegador para workspaces de desarrollo.",
+    "image": "lscr.io/linuxserver/code-server:latest",
+    "category": "dev",
+    "containerPort": 8443,
+    "protocol": "https",
+    "urlPath": "/",
+    "shmSize": "1gb",
+    "thumbnail": "",
+    "env": {
+      "TZ": "America/Los_Angeles",
+      "PUID": "1000",
+      "PGID": "1000",
+      "PASSWORD": "changeme"
+    }
+  },
+  {
+    "catalogId": "openssh-server",
+    "id": "openssh-server",
+    "name": "OpenSSH Server",
+    "description": "Servidor SSH gestionado para laboratorios y acceso tecnico.",
+    "image": "lscr.io/linuxserver/openssh-server:latest",
+    "category": "infra",
+    "containerPort": 2222,
+    "protocol": "http",
+    "urlPath": "/",
+    "shmSize": "512m",
+    "thumbnail": "",
+    "env": {
+      "TZ": "America/Los_Angeles",
+      "PUID": "1000",
+      "PGID": "1000"
+    }
+  },
+  {
+    "catalogId": "audacity",
+    "id": "audacity",
+    "name": "Audacity",
+    "description": "Edicion de audio remota con interfaz Linux.",
+    "image": "lscr.io/linuxserver/audacity:latest",
+    "category": "media",
+    "containerPort": 3000,
+    "protocol": "http",
+    "urlPath": "/",
+    "shmSize": "1gb",
+    "thumbnail": "",
+    "env": {
+      "TZ": "America/Los_Angeles",
+      "PUID": "1000",
+      "PGID": "1000"
+    }
+  }
+]

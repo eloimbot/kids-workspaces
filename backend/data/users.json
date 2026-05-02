@@ -1,0 +1,34 @@
+[
+  {
+    "id": "usr_admin",
+    "name": "Platform Admin",
+    "email": "admin@kidsworkspaces.local",
+    "role": "admin",
+    "passwordSalt": "f7f895dd673303e455fa2bc4f7352dd2",
+    "passwordHash": "5d1d8e658cb72b841c8a939d87b822e1885d1f605740ff5f39d4973aa92772c965f12ff0ccfd862e019ee5d21ce0fea6c9214599a59a80664da39a783cf45f68"
+  },
+  {
+    "id": "usr_manager",
+    "name": "Workspace Manager",
+    "email": "manager@kidsworkspaces.local",
+    "role": "manager",
+    "passwordSalt": "cf8014699260ce7d0012fae49f28c68b",
+    "passwordHash": "1afe7acbda4c410191b868768885c4e96edbd24bae489b8ce0e791b8d0fb17e3f7e6624dd163a0d393befee88f535ea06243a9248b5ea00ddbef413f2631b098"
+  },
+  {
+    "id": "usr_0adebf3dc1",
+    "name": "eloimbot",
+    "email": "mbotforever@gmail.com",
+    "role": "manager",
+    "passwordSalt": "a50575a74984a814a020a7a75f4de92a",
+    "passwordHash": "80f70e3e8fb140b17e7c41be7fd9927a5b8cb428c35e841545152be5b39eb8ecfeb74f11f170f1f95ce83933cc19b6df020885f2505ac9bef0e6ae5c8b26fb6d"
+  },
+  {
+    "id": "usr_e4fe099c8e",
+    "name": "eloimbot",
+    "email": "testeloipro@gmail.com",
+    "role": "manager",
+    "passwordSalt": "a89bc02a47b69f66e3fe8baf02b82728",
+    "passwordHash": "36428e76529b4423dfdff6d8d530a71e86b31c6225ebaa1396308236535179911ba66b259f16191a2e08ba98abbdb793a8be056461dfa43c8d8e213426dd3068"
+  }
+]

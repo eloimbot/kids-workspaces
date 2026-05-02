@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kids Workspaces</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <section id="login-view" class="login-view">
+        <div class="login-panel">
+          <div class="login-brand">
+            <div class="brand-orb"></div>
+            <p class="eyebrow">Enterprise Workspace Access</p>
+            <h1>Kids Workspaces Control Plane</h1>
+            <p class="login-copy">
+              Inicia sesion para acceder a apps Linux aisladas, sesiones por usuario
+              y una consola centralizada preparada para equipos.
+            </p>
+          </div>
+
+          <form id="login-form" class="login-card">
+            <div>
+              <p class="section-label">Sign in</p>
+              <h2>Acceso seguro al portal</h2>
+            </div>
+            <label>
+              <span>Email corporativo</span>
+              <input id="login-email" type="email" autocomplete="username" required />
+            </label>
+            <label>
+              <span>Contrasena</span>
+              <input id="login-password" type="password" autocomplete="current-password" required />
+            </label>
+            <button class="primary" type="submit">Entrar</button>
+            <p id="login-error" class="inline-error"></p>
+            <div class="login-help">
+              <p>Admin demo: `admin@kidsworkspaces.local` / `admin123`</p>
+              <p>Manager demo: `manager@kidsworkspaces.local` / `manager123`</p>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <section id="dashboard-view" class="dashboard-view hidden">
+        <aside class="sidebar">
+          <div class="brand-block">
+            <div class="brand-mark">KW</div>
+            <div>
+              <strong>Kids Workspaces</strong>
+              <p>Enterprise console</p>
+            </div>
+          </div>
+
+          <nav class="sidebar-nav">
+            <button class="nav-link nav-link-active" id="jump-catalog" type="button">Workspace Catalog</button>
+            <button class="nav-link" id="refresh-sessions" type="button">My Sessions</button>
+            <button class="nav-link" id="refresh-all" type="button">Refresh Data</button>
+          </nav>
+
+          <section class="sidebar-panel">
+            <p class="section-label">Tenant status</p>
+            <strong id="health-state">Comprobando...</strong>
+            <p id="health-copy">Consultando estado de la plataforma.</p>
+          </section>
+
+          <section class="sidebar-panel stats-stack">
+            <article>
+              <span>Templates</span>
+              <strong id="template-count">0</strong>
+            </article>
+            <article>
+              <span>Sessions</span>
+              <strong id="session-count">0</strong>
+            </article>
+            <article>
+              <span>Access</span>
+              <strong id="public-mode">Local</strong>
+            </article>
+          </section>
+
+          <section class="sidebar-panel user-panel">
+            <p class="section-label">Current user</p>
+            <strong id="current-user-name">-</strong>
+            <p id="current-user-role">-</p>
+            <button id="logout-button" class="ghost" type="button">Cerrar sesion</button>
+          </section>
+        </aside>
+
+        <main class="main-panel">
+          <header class="topbar">
+            <div>
+              <p class="eyebrow">Workspace Operations</p>
+              <h1>Unified Workspace Catalog</h1>
+            </div>
+
+            <div class="topbar-tools">
+              <label class="search-shell">
+                <span>Buscar app o categoria</span>
+                <input id="search-input" type="search" placeholder="Firefox, desktop, dev..." />
+              </label>
+              <button id="simple-logout-button" class="ghost hidden" type="button">Cerrar sesion</button>
+              <button id="open-user-modal" class="ghost hidden" type="button">Add user</button>
+              <button id="open-template-modal" class="ghost hidden" type="button">Add linuxserver image</button>
+            </div>
+          </header>
+
+          <section id="admin-hero" class="hero-strip">
+            <article class="hero-card">
+              <p class="section-label">Workspace delivery</p>
+              <h2>Portal multiusuario con ownership, aislamiento y rutas protegidas</h2>
+              <p>
+                Cada workspace queda asociado a su propietario. Los administradores
+                pueden supervisar el tenant y los usuarios solo ven sus sesiones.
+              </p>
+            </article>
+
+            <div class="hero-metrics">
+              <article>
+                <span>Tenant posture</span>
+                <strong>Controlled</strong>
+                <p>Autenticacion obligatoria y visibilidad por rol.</p>
+              </article>
+              <article>
+                <span>Publishing</span>
+                <strong>Single endpoint</strong>
+                <p>Ideal para Cloudflare Tunnel y acceso corporativo.</p>
+              </article>
+            </div>
+          </section>
+
+          <section class="section-row">
+            <div>
+              <p class="section-label">Catalog</p>
+              <h2>Workspace Templates</h2>
+            </div>
+            <p class="section-copy">
+              Lanza sesiones seguras con control de acceso por usuario y varias
+              sesiones simultaneas por plantilla.
+            </p>
+          </section>
+
+          <section id="standard-home" class="standard-home hidden">
+            <div class="kasm-home-card">
+              <div>
+                <p class="section-label">Workspaces</p>
+                <h2>Launch a workspace</h2>
+                <p>
+                  Abre una app Linux y revisa tus sesiones activas en una sola pantalla,
+                  con una experiencia mas cercana a Kasm Workspaces.
+                </p>
+              </div>
+              <div class="kasm-home-stats">
+                <article>
+                  <span>Assigned apps</span>
+                  <strong id="standard-template-count">0</strong>
+                </article>
+                <article>
+                  <span>Active sessions</span>
+                  <strong id="standard-session-count">0</strong>
+                </article>
+              </div>
+            </div>
+          </section>
+
+          <section class="workspace-layout">
+            <section class="catalog-panel">
+              <div id="templates" class="catalog-grid"></div>
+            </section>
+
+            <aside class="sessions-panel">
+              <div class="panel-head">
+                <div>
+                  <p class="section-label">Sessions</p>
+                  <h2>Assigned Workspaces</h2>
+                </div>
+                <button id="refresh-sessions-secondary" class="ghost compact" type="button">Reload</button>
+              </div>
+              <div id="sessions" class="session-stack"></div>
+            </aside>
+          </section>
+
+          <section id="users-section" class="users-section hidden">
+            <div class="panel-head">
+              <div>
+                <p class="section-label">Administration</p>
+                <h2>Directory Users</h2>
+              </div>
+            </div>
+            <div id="users-list" class="users-grid"></div>
+          </section>
+        </main>
+      </section>
+    </div>
+
+    <div id="user-modal" class="modal hidden">
+      <div class="modal-card">
+        <div class="panel-head">
+          <div>
+            <p class="section-label">User provisioning</p>
+            <h2>Crear usuario</h2>
+          </div>
+          <button id="close-user-modal" class="ghost compact" type="button">Cerrar</button>
+        </div>
+        <form id="user-form" class="user-form">
+          <label>
+            <span>Nombre</span>
+            <input id="new-user-name" required />
+          </label>
+          <label>
+            <span>Email</span>
+            <input id="new-user-email" type="email" required />
+          </label>
+          <label>
+            <span>Contrasena temporal</span>
+            <input id="new-user-password" type="password" required />
+          </label>
+          <label>
+            <span>Rol</span>
+            <select id="new-user-role">
+              <option value="manager">Manager</option>
+              <option value="admin">Admin</option>
+            </select>
+          </label>
+          <button class="primary" type="submit">Crear usuario</button>
+          <p id="user-form-error" class="inline-error"></p>
+        </form>
+      </div>
+    </div>
+
+    <div id="template-modal" class="modal hidden">
+      <div class="modal-card">
+        <div class="panel-head">
+          <div>
+            <p class="section-label">App Store</p>
+            <h2>linuxserver.io marketplace</h2>
+          </div>
+          <button id="close-template-modal" class="ghost compact" type="button">Cerrar</button>
+        </div>
+        <div class="store-shell">
+          <label class="store-search">
+            <span>Buscar en la tienda</span>
+            <input id="store-search-input" placeholder="Firefox, desktop, dev..." />
+          </label>
+          <p class="store-copy">
+            Instala apps curadas de `linuxserver.io` con un clic. Las ya instaladas
+            aparecen marcadas dentro de la tienda.
+          </p>
+          <div id="store-grid" class="store-grid"></div>
+          <p id="template-form-error" class="inline-error"></p>
+        </div>
+      </div>
+    </div>
+
+    <template id="template-card">
+      <article class="workspace-card">
+        <div class="workspace-thumb">
+          <div class="workspace-thumb-media"></div>
+          <span class="workspace-badge"></span>
+          <span class="workspace-port"></span>
+        </div>
+        <div class="workspace-body">
+          <h3></h3>
+          <p class="workspace-desc"></p>
+          <dl class="workspace-meta">
+            <div>
+              <dt>Image</dt>
+              <dd class="workspace-image"></dd>
+            </div>
+            <div>
+              <dt>Route</dt>
+              <dd class="workspace-route"></dd>
+            </div>
+          </dl>
+        </div>
+        <button class="launch-button">Launch workspace</button>
+      </article>
+    </template>
+
+    <template id="session-card">
+      <article class="session-card">
+        <div class="session-main">
+          <div class="session-title-row">
+            <h3></h3>
+            <span class="session-state"></span>
+          </div>
+          <p class="session-copy"></p>
+          <div class="session-links">
+            <a target="_blank" rel="noreferrer" class="open-link">Open workspace</a>
+            <code class="direct-link"></code>
+          </div>
+        </div>
+        <div class="session-actions">
+          <button class="ghost copy-link">Copy URL</button>
+          <button class="danger stop-session">Stop</button>
+        </div>
+      </article>
+    </template>
+
+    <template id="user-card">
+      <article class="user-card">
+        <div class="user-card-top">
+          <h3></h3>
+          <span class="user-role"></span>
+        </div>
+        <p class="user-email"></p>
+      </article>
+    </template>
+
+    <template id="store-card">
+      <article class="store-card">
+        <div class="store-card-top">
+          <div class="store-card-media"></div>
+          <span class="store-category"></span>
+        </div>
+        <div class="store-card-body">
+          <h3></h3>
+          <p class="store-description"></p>
+          <p class="store-image"></p>
+        </div>
+        <button class="store-install-button">Install</button>
+      </article>
+    </template>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,28 @@
+services:
+  kids-workspaces:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: kids-workspaces
+    restart: unless-stopped
+    environment:
+      PORT: "3000"
+      APP_HOST: "127.0.0.1"
+      SESSION_PROXY_HOST: "host.docker.internal"
+      PUBLIC_BASE_URL: "https://workspaces.example.com"
+    ports:
+      - "3000:3000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: kids-workspaces-tunnel
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: "${TUNNEL_TOKEN}"
+    depends_on:
+      - kids-workspaces

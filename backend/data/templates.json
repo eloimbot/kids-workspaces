@@ -1,0 +1,84 @@
+[
+  {
+    "id": "firefox",
+    "name": "Firefox",
+    "description": "Navegador Firefox en contenedor con acceso web.",
+    "image": "lscr.io/linuxserver/firefox:latest",
+    "containerPort": 3000,
+    "protocol": "http",
+    "urlPath": "/",
+    "shmSize": "1gb",
+    "category": "browser",
+    "thumbnail": "",
+    "env": {
+      "TZ": "America/Los_Angeles",
+      "PUID": "1000",
+      "PGID": "1000"
+    }
+  },
+  {
+    "id": "chromium",
+    "name": "Chromium",
+    "description": "Navegador Chromium en contenedor con interfaz web.",
+    "image": "lscr.io/linuxserver/chromium:latest",
+    "containerPort": 3000,
+    "protocol": "http",
+    "urlPath": "/",
+    "shmSize": "1gb",
+    "category": "browser",
+    "thumbnail": "",
+    "env": {
+      "TZ": "America/Los_Angeles",
+      "PUID": "1000",
+      "PGID": "1000"
+    }
+  },
+  {
+    "id": "webtop-ubuntu-kde",
+    "name": "Webtop Ubuntu KDE",
+    "description": "Escritorio Linux completo en navegador, util para lanzar varias apps desde una sola sesion.",
+    "image": "lscr.io/linuxserver/webtop:ubuntu-kde",
+    "containerPort": 3000,
+    "protocol": "http",
+    "urlPath": "/",
+    "shmSize": "2gb",
+    "category": "desktop",
+    "thumbnail": "",
+    "env": {
+      "TZ": "America/Los_Angeles",
+      "PUID": "1000",
+      "PGID": "1000"
+    }
+  },
+  {
+    "id": "code-server",
+    "name": "Code Server",
+    "description": "VS Code en el navegador para una experiencia tipo workspace.",
+    "image": "lscr.io/linuxserver/code-server:latest",
+    "containerPort": 8443,
+    "protocol": "https",
+    "urlPath": "/",
+    "shmSize": "1gb",
+    "category": "dev",
+    "thumbnail": "",
+    "env": {
+      "TZ": "America/Los_Angeles",
+      "PUID": "1000",
+      "PGID": "1000",
+      "PASSWORD": "changeme"
+    }
+  },
+  {
+    "id": "tpl-dc59bb69",
+    "name": "LibreWolf",
+    "description": "Browser basado en Firefox con enfoque en privacidad.",
+    "image": "lscr.io/linuxserver/librewolf:latest",
+    "containerPort": 3000,
+    "protocol": "http",
+    "urlPath": "/",
+    "shmSize": "1gb",
+    "category": "browser",
+    "thumbnail": "",
+    "env": {}
+  }
+]
