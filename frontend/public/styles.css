@@ -532,9 +532,59 @@ button:hover,
   word-break: break-word;
 }
 
-.launch-button {
-  width: calc(100% - 32px);
+.workspace-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  padding: 0 16px 16px;
+}
+
+.workspace-actions .launch-button,
+.workspace-actions .download-button {
+  width: 100%;
+}
+
+.workspace-job {
+  display: grid;
+  gap: 8px;
   margin: 0 16px 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.workspace-job-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.workspace-job-title,
+.workspace-job-progress {
+  font-size: 0.84rem;
+}
+
+.workspace-job-copy {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.workspace-job-bar {
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.workspace-job-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: inherit;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  transition: width 220ms ease;
 }
 
 .session-stack,
@@ -854,5 +904,9 @@ body.standard-user-mode .users-section {
   .launch-button {
     width: 100%;
     text-align: center;
+  }
+
+  .workspace-actions {
+    grid-template-columns: 1fr;
   }
 }

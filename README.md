@@ -8,7 +8,10 @@ La app expone un panel web donde puedes:
 
 - iniciar sesion con usuarios y roles;
 - ver catalogo de apps disponibles;
+- ver si la imagen Docker de cada app ya esta descargada en el host;
+- descargar una imagen faltante desde la propia GUI con barra de progreso;
 - lanzar una sesion en un contenedor Docker;
+- ver el progreso de arranque del workspace mientras el CT se prepara;
 - lanzar varias sesiones simultaneas, incluso de la misma app;
 - abrir la URL de la app en el navegador;
 - detener sesiones creadas desde el panel.
@@ -118,7 +121,10 @@ Para eso:
 - `GET /api/auth/me`
 - `GET /api/health`
 - `GET /api/templates`
+- `POST /api/templates/:id/pull`
 - `POST /api/templates`
+- `GET /api/jobs/:id`
+- `POST /api/sessions/launch`
 - `GET /api/sessions`
 - `POST /api/sessions`
 - `DELETE /api/sessions/:name`
@@ -144,6 +150,7 @@ Los usuarios `manager` ven una experiencia mas cercana a Kasm:
 
 - solo aparece el catalogo de workspaces;
 - al lado ven sus sesiones activas;
+- cada tarjeta puede mostrar si la imagen falta, su descarga y el progreso de arranque;
 - no ven gestion de usuarios ni herramientas administrativas.
 
 ## Despliegue en Linux con Cloudflare Tunnel

@@ -81,6 +81,52 @@ async function runCommand(command, args, options = {}) {
   });
 }
 
+async function runStreamingCommand(command, args, options = {}) {
+  return await new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      windowsHide: true,
+      stdio: "pipe",
+    });
+    let stdout = "";
+    let stderr = "";
+
+    const handleChunk = (streamName, chunk) => {
+      const text = chunk.toString();
+
+      if (streamName === "stdout") {
+        stdout += text;
+        options.onStdout?.(text);
+      } else {
+        stderr += text;
+        options.onStderr?.(text);
+      }
+    };
+
+    child.stdout.on("data", (chunk) => handleChunk("stdout", chunk));
+    child.stderr.on("data", (chunk) => handleChunk("stderr", chunk));
+    child.on("error", reject);
+
+    child.on("close", (code) => {
+      if (code === 0) {
+        resolve({ stdout, stderr });
+        return;
+      }
+
+      const error = new Error(stderr || `Command failed with exit code ${code}`);
+      error.code = code;
+      error.stderr = stderr;
+      error.stdout = stdout;
+      reject(error);
+    });
+
+    if (options.stdin) {
+      child.stdin.write(options.stdin);
+    }
+
+    child.stdin.end();
+  });
+}
+
 async function runDocker(args, options = {}) {
   try {
     const invocation = resolveDockerInvocation(args, options);
@@ -118,6 +164,44 @@ async function runDocker(args, options = {}) {
   }
 }
 
+async function runDockerStreaming(args, options = {}) {
+  try {
+    const invocation = resolveDockerInvocation(args, options);
+    return await runStreamingCommand(invocation.command, invocation.args, {
+      stdin: shouldUseSudo(options) && options.sudoPassword ? `${options.sudoPassword}\n` : undefined,
+      onStdout: options.onStdout,
+      onStderr: options.onStderr,
+    });
+  } catch (error) {
+    if (error.code === "ENOENT") {
+      throw httpError(
+        shouldUseSudo(options)
+          ? "No encontre sudo o docker en PATH. Revisa DOCKER_USE_SUDO, DOCKER_BIN y tu entorno."
+          : "Docker no esta disponible en PATH. Instala Docker Desktop o ajusta tu PATH.",
+        500,
+      );
+    }
+
+    const details = error.stderr?.trim() || error.message;
+    const sudoPasswordRequired =
+      shouldUseSudo(options)
+      && /sudo:.*password|a password is required|sudoers|not allowed to execute/i.test(details);
+    const dockerSocketPermissionDenied =
+      !shouldUseSudo(options)
+      && /permission denied while trying to connect to the docker api|got permission denied while trying to connect to the docker daemon socket|permission denied.*\/var\/run\/docker\.sock/i.test(details);
+
+    if (sudoPasswordRequired || dockerSocketPermissionDenied) {
+      throw httpError(
+        "Docker requiere permisos sudo para continuar.",
+        401,
+        "SUDO_PASSWORD_REQUIRED",
+      );
+    }
+
+    throw httpError(`Docker fallo: ${details}`, 500);
+  }
+}
+
 async function tryRunDocker(args, options = {}) {
   try {
     return await runDocker(args, options);
@@ -137,6 +221,17 @@ export async function probeDocker(options = {}) {
   } catch (_error) {
     return false;
   }
+}
+
+export async function listLocalImages(options = {}) {
+  const stdout = await runDocker(["image", "ls", "--format", "{{.Repository}}:{{.Tag}}"], options);
+
+  return new Set(
+    stdout
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean),
+  );
 }
 
 function buildSessionName(templateId) {
@@ -402,4 +497,155 @@ export async function getSessionTarget(name, user) {
   }
 
   return `${session.protocol || "http"}://${sessionProxyHost}:${hostPort}`;
+}
+
+function normalizePullLine(line) {
+  return String(line || "").replace(/\u001b\[[0-9;]*m/g, "").replace(/\r/g, "").trim();
+}
+
+function parseProgressNumber(value) {
+  const match = String(value || "").trim().match(/^([\d.]+)\s*([KMGT]?B)$/i);
+
+  if (!match) {
+    return null;
+  }
+
+  const units = {
+    B: 1,
+    KB: 1024,
+    MB: 1024 ** 2,
+    GB: 1024 ** 3,
+    TB: 1024 ** 4,
+  };
+
+  return Number(match[1]) * (units[match[2].toUpperCase()] || 1);
+}
+
+function summarizePullProgress(layers) {
+  const values = [...layers.values()];
+
+  if (!values.length) {
+    return {
+      progress: 8,
+      message: "Preparing image download",
+    };
+  }
+
+  const total = values.reduce((sum, layer) => sum + layer.progress, 0);
+  const completed = values.filter((layer) => layer.progress >= 1).length;
+  const percent = Math.max(5, Math.min(99, Math.round((total / values.length) * 100)));
+
+  return {
+    progress: percent,
+    message: `Downloading image layers (${completed}/${values.length})`,
+  };
+}
+
+function updateLayerState(layers, line) {
+  const layerMatch = line.match(/^([a-z0-9]+):\s+(.+)$/i);
+
+  if (!layerMatch) {
+    if (/status:\s+(downloaded newer image|image is up to date)/i.test(line)) {
+      return {
+        progress: 100,
+        message: line,
+      };
+    }
+
+    if (/pulling from/i.test(line)) {
+      return {
+        progress: 4,
+        message: line,
+      };
+    }
+
+    return null;
+  }
+
+  const [, layerId, rawStatus] = layerMatch;
+  const status = rawStatus.trim();
+  const state = layers.get(layerId) ?? { progress: 0 };
+
+  if (/already exists|pull complete/i.test(status)) {
+    state.progress = 1;
+  } else if (/waiting/i.test(status)) {
+    state.progress = Math.max(state.progress, 0.05);
+  } else if (/pulling fs layer/i.test(status)) {
+    state.progress = Math.max(state.progress, 0.12);
+  } else if (/verifying checksum/i.test(status)) {
+    state.progress = Math.max(state.progress, 0.72);
+  } else if (/download complete/i.test(status)) {
+    state.progress = Math.max(state.progress, 0.62);
+  } else if (/extracting\s+\[.*\]\s+([\d.]+\s*[KMGT]?B)\/([\d.]+\s*[KMGT]?B)/i.test(status)) {
+    const match = status.match(/extracting\s+\[.*\]\s+([\d.]+\s*[KMGT]?B)\/([\d.]+\s*[KMGT]?B)/i);
+    const current = parseProgressNumber(match?.[1]);
+    const total = parseProgressNumber(match?.[2]);
+
+    if (current && total) {
+      state.progress = Math.max(state.progress, 0.62 + Math.min(current / total, 1) * 0.32);
+    } else {
+      state.progress = Math.max(state.progress, 0.8);
+    }
+  } else if (/downloading\s+\[.*\]\s+([\d.]+\s*[KMGT]?B)\/([\d.]+\s*[KMGT]?B)/i.test(status)) {
+    const match = status.match(/downloading\s+\[.*\]\s+([\d.]+\s*[KMGT]?B)\/([\d.]+\s*[KMGT]?B)/i);
+    const current = parseProgressNumber(match?.[1]);
+    const total = parseProgressNumber(match?.[2]);
+
+    if (current && total) {
+      state.progress = Math.max(state.progress, 0.12 + Math.min(current / total, 1) * 0.48);
+    } else {
+      state.progress = Math.max(state.progress, 0.32);
+    }
+  }
+
+  layers.set(layerId, state);
+  return summarizePullProgress(layers);
+}
+
+export async function pullImage(image, options = {}) {
+  const layers = new Map();
+  let buffer = "";
+
+  const processChunk = (chunk) => {
+    buffer += chunk;
+    const lines = buffer.split("\n");
+    buffer = lines.pop() || "";
+
+    for (const rawLine of lines) {
+      const line = normalizePullLine(rawLine);
+
+      if (!line) {
+        continue;
+      }
+
+      const update = updateLayerState(layers, line);
+
+      if (update) {
+        options.onProgress?.(update);
+      }
+    }
+  };
+
+  options.onProgress?.({
+    progress: 2,
+    message: "Starting image download",
+  });
+
+  await runDockerStreaming(["pull", image], {
+    sudoPassword: options.sudoPassword,
+    onStdout: processChunk,
+    onStderr: processChunk,
+  });
+
+  if (buffer.trim()) {
+    const update = updateLayerState(layers, normalizePullLine(buffer));
+    if (update) {
+      options.onProgress?.(update);
+    }
+  }
+
+  options.onProgress?.({
+    progress: 100,
+    message: "Image downloaded",
+  });
 }

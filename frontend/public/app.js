@@ -47,6 +47,7 @@ const state = {
   health: null,
   query: "",
   storeQuery: "",
+  jobsByTemplateId: {},
 };
 
 async function request(url, options) {
@@ -169,6 +170,35 @@ function countSessionsForTemplate(templateId) {
   return state.sessions.filter((session) => session.templateId === templateId).length;
 }
 
+function getTemplateJob(templateId) {
+  return state.jobsByTemplateId[templateId] || null;
+}
+
+function setTemplateJob(templateId, job) {
+  if (!templateId) {
+    return;
+  }
+
+  if (!job) {
+    delete state.jobsByTemplateId[templateId];
+    return;
+  }
+
+  state.jobsByTemplateId[templateId] = job;
+}
+
+function getImageStatusCopy(template) {
+  if (template.imagePresent === true) {
+    return "Ready on host";
+  }
+
+  if (template.imagePresent === false) {
+    return "Image missing";
+  }
+
+  return "Unknown until Docker access is granted";
+}
+
 function renderStore() {
   if (!storeRoot) {
     return;
@@ -235,15 +265,46 @@ function renderTemplates() {
 
   for (const item of visibleTemplates) {
     const node = templateCard.content.firstElementChild.cloneNode(true);
+    const job = getTemplateJob(item.id);
+    const imageMissing = item.imagePresent === false;
     node.querySelector(".workspace-thumb-media").style.background = templateVisual(item);
     node.querySelector(".workspace-badge").textContent = item.category;
     node.querySelector(".workspace-port").textContent = `:${item.containerPort}`;
     node.querySelector("h3").textContent = item.name;
     node.querySelector(".workspace-desc").textContent = item.description;
     node.querySelector(".workspace-image").textContent = item.image;
+    node.querySelector(".workspace-image-status").textContent = getImageStatusCopy(item);
     node.querySelector(".workspace-route").textContent =
       `${item.urlPath || "/"} | active: ${countSessionsForTemplate(item.id)}`;
-    node.querySelector(".launch-button").addEventListener("click", () => launchSession(item.id));
+
+    const launchButton = node.querySelector(".launch-button");
+    const downloadButton = node.querySelector(".download-button");
+    const jobShell = node.querySelector(".workspace-job");
+
+    launchButton.disabled = Boolean(job) || imageMissing;
+    launchButton.textContent = job?.type === "workspace-launch" && job.status !== "failed"
+      ? "Starting..."
+      : "Launch workspace";
+    launchButton.addEventListener("click", () => launchSession(item.id));
+
+    if (imageMissing) {
+      downloadButton.classList.remove("hidden");
+      downloadButton.disabled = job?.type === "image-pull" && job.status !== "failed";
+      downloadButton.textContent = job?.type === "image-pull" && job.status !== "failed"
+        ? "Downloading..."
+        : "Download image";
+      downloadButton.addEventListener("click", () => downloadTemplateImage(item.id));
+    }
+
+    if (job) {
+      jobShell.classList.remove("hidden");
+      node.querySelector(".workspace-job-title").textContent =
+        job.type === "image-pull" ? "Image download" : "Workspace startup";
+      node.querySelector(".workspace-job-progress").textContent = `${Math.round(job.progress || 0)}%`;
+      node.querySelector(".workspace-job-fill").style.width = `${Math.max(0, Math.min(100, job.progress || 0))}%`;
+      node.querySelector(".workspace-job-copy").textContent = job.message || "Working...";
+    }
+
     templatesRoot.appendChild(node);
   }
 }
@@ -418,12 +479,12 @@ async function logout() {
 
 async function launchSession(templateId) {
   try {
-    await runWithSudoPrompt(() => request("/api/sessions", {
+    const data = await runWithSudoPrompt(() => request("/api/sessions/launch", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ templateId }),
     }));
-    await Promise.all([loadSessions(), loadTemplates()]);
+    await watchJob(data.job);
   } catch (error) {
     alert(error.message);
   }
@@ -465,6 +526,17 @@ async function createManagedTemplate() {
   templateFormError.textContent = "";
 }
 
+async function downloadTemplateImage(templateId) {
+  try {
+    const data = await runWithSudoPrompt(() => request(`/api/templates/${templateId}/pull`, {
+      method: "POST",
+    }));
+    await watchJob(data.job);
+  } catch (error) {
+    alert(error.message);
+  }
+}
+
 async function installStoreItem(catalogId) {
   templateFormError.textContent = "";
 
@@ -477,6 +549,66 @@ async function installStoreItem(catalogId) {
   } catch (error) {
     templateFormError.textContent = error.message;
   }
+}
+
+async function fetchJob(jobId) {
+  const data = await request(`/api/jobs/${jobId}`);
+  return data.job;
+}
+
+function delay(ms) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+async function watchJob(initialJob) {
+  let job = initialJob;
+  setTemplateJob(job.templateId, job);
+  renderTemplates();
+
+  while (job && (job.status === "pending" || job.status === "running")) {
+    await delay(900);
+    job = await fetchJob(job.id);
+    setTemplateJob(job.templateId, job);
+    renderTemplates();
+  }
+
+  if (!job) {
+    return;
+  }
+
+  if (job.status === "completed") {
+    if (job.type === "image-pull") {
+      const template = state.templates.find((item) => item.id === job.templateId);
+      if (template) {
+        template.imagePresent = true;
+      }
+    }
+
+    if (job.type === "workspace-launch") {
+      await Promise.all([loadSessions(), loadTemplates()]);
+    } else {
+      await loadTemplates();
+    }
+
+    window.setTimeout(() => {
+      setTemplateJob(job.templateId, null);
+      renderTemplates();
+    }, 1200);
+    return;
+  }
+
+  const template = state.templates.find((item) => item.id === job.templateId);
+  if (template && job.code === "IMAGE_NOT_PRESENT") {
+    template.imagePresent = false;
+    renderTemplates();
+  }
+
+  window.setTimeout(() => {
+    setTemplateJob(job.templateId, null);
+    renderTemplates();
+  }, 1400);
+
+  alert(job.error || job.message || "La operacion no se pudo completar.");
 }
 
 loginForm.addEventListener("submit", async (event) => {

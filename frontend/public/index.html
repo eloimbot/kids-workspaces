@@ -272,9 +272,26 @@
               <dt>Route</dt>
               <dd class="workspace-route"></dd>
             </div>
+            <div>
+              <dt>Image status</dt>
+              <dd class="workspace-image-status"></dd>
+            </div>
           </dl>
         </div>
-        <button class="launch-button">Launch workspace</button>
+        <div class="workspace-job hidden">
+          <div class="workspace-job-head">
+            <strong class="workspace-job-title">Preparing</strong>
+            <span class="workspace-job-progress">0%</span>
+          </div>
+          <div class="workspace-job-bar">
+            <div class="workspace-job-fill"></div>
+          </div>
+          <p class="workspace-job-copy"></p>
+        </div>
+        <div class="workspace-actions">
+          <button class="ghost download-button hidden">Download image</button>
+          <button class="launch-button">Launch workspace</button>
+        </div>
       </article>
     </template>
 

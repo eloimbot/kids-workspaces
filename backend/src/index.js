@@ -17,10 +17,20 @@ import {
   createSession,
   deleteSession,
   getSessionTarget,
+  listLocalImages,
   listSessions,
+  pullImage,
   probeDocker,
 } from "./services/docker.js";
 import { proxyHttpRequest, proxyWsRequest } from "./services/proxy.js";
+import {
+  canAccessJob,
+  completeJob,
+  createJob,
+  failJob,
+  getJob,
+  updateJob,
+} from "./services/tasks.js";
 import {
   createWebSession,
   destroyWebSession,
@@ -87,6 +97,21 @@ function requireAdmin(req, _res, next) {
   }
 
   next();
+}
+
+async function enrichTemplatesWithImageState(templates, sudoPassword) {
+  try {
+    const localImages = await listLocalImages({ sudoPassword });
+    return templates.map((template) => ({
+      ...template,
+      imagePresent: localImages.has(template.image),
+    }));
+  } catch (_error) {
+    return templates.map((template) => ({
+      ...template,
+      imagePresent: null,
+    }));
+  }
 }
 
 app.post("/api/auth/login", async (req, res, next) => {
@@ -166,7 +191,11 @@ app.get("/api/health", async (req, res, next) => {
 app.get("/api/templates", requireAuth, async (_req, res, next) => {
   try {
     const templates = await loadTemplates();
-    res.json({ items: templates });
+    const items = await enrichTemplatesWithImageState(
+      templates,
+      _req.currentWebSession?.sudoPassword,
+    );
+    res.json({ items });
   } catch (error) {
     next(error);
   }
@@ -206,6 +235,155 @@ app.get("/api/sessions", requireAuth, async (req, res, next) => {
       sudoPassword: req.currentWebSession?.sudoPassword,
     });
     res.json({ items: sessions });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/jobs/:id", requireAuth, async (req, res, next) => {
+  try {
+    const job = getJob(req.params.id);
+
+    if (!canAccessJob(job, req.currentUser)) {
+      res.status(404).json({ error: "Job no encontrado." });
+      return;
+    }
+
+    res.json({ job });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/templates/:id/pull", requireAuth, async (req, res, next) => {
+  try {
+    const templates = await loadTemplates();
+    const template = templates.find((item) => item.id === req.params.id);
+
+    if (!template) {
+      res.status(404).json({ error: "Template no encontrado." });
+      return;
+    }
+
+    const job = createJob({
+      type: "image-pull",
+      ownerId: req.currentUser.id,
+      templateId: template.id,
+      message: "Queued image download",
+    });
+
+    res.status(202).json({ job });
+
+    queueMicrotask(async () => {
+      try {
+        updateJob(job.id, {
+          status: "running",
+          progress: 1,
+          message: "Checking local image cache",
+        });
+
+        const localImages = await listLocalImages({
+          sudoPassword: req.currentWebSession?.sudoPassword,
+        });
+
+        if (localImages.has(template.image)) {
+          completeJob(job.id, {
+            image: template.image,
+            templateId: template.id,
+          }, "Image already available");
+          return;
+        }
+
+        await pullImage(template.image, {
+          sudoPassword: req.currentWebSession?.sudoPassword,
+          onProgress: ({ progress, message }) => {
+            updateJob(job.id, {
+              status: "running",
+              progress,
+              message,
+            });
+          },
+        });
+
+        completeJob(job.id, {
+          image: template.image,
+          templateId: template.id,
+        }, "Image ready");
+      } catch (error) {
+        failJob(job.id, error);
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/sessions/launch", requireAuth, async (req, res, next) => {
+  try {
+    const { templateId } = req.body ?? {};
+
+    if (!templateId) {
+      res.status(400).json({ error: "templateId is required" });
+      return;
+    }
+
+    const templates = await loadTemplates();
+    const template = templates.find((item) => item.id === templateId);
+
+    if (!template) {
+      res.status(404).json({ error: "Template no encontrado." });
+      return;
+    }
+
+    const job = createJob({
+      type: "workspace-launch",
+      ownerId: req.currentUser.id,
+      templateId: template.id,
+      message: "Queued workspace launch",
+    });
+
+    res.status(202).json({ job });
+
+    queueMicrotask(async () => {
+      try {
+        updateJob(job.id, {
+          status: "running",
+          progress: 4,
+          message: "Checking image availability",
+        });
+
+        const localImages = await listLocalImages({
+          sudoPassword: req.currentWebSession?.sudoPassword,
+        });
+
+        if (!localImages.has(template.image)) {
+          const error = new Error("La imagen no esta descargada todavia.");
+          error.code = "IMAGE_NOT_PRESENT";
+          throw error;
+        }
+
+        updateJob(job.id, {
+          status: "running",
+          progress: 18,
+          message: "Creating container",
+        });
+
+        const session = await createSession(template.id, req.currentUser, {
+          baseUrl: getRequestBaseUrl(req),
+          sudoPassword: req.currentWebSession?.sudoPassword,
+        });
+
+        updateJob(job.id, {
+          status: "running",
+          progress: 82,
+          message: "Finalizing workspace route",
+        });
+
+        completeJob(job.id, session, "Workspace ready");
+      } catch (error) {
+        failJob(job.id, error);
+      }
+    });
   } catch (error) {
     next(error);
   }
