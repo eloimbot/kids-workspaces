@@ -8,15 +8,22 @@ services:
     environment:
       HOST: "0.0.0.0"
       PORT: "3000"
+      APP_PROTOCOL: "https"
       APP_HOST: "127.0.0.1"
       SESSION_PROXY_HOST: "host.docker.internal"
       PUBLIC_BASE_URL: "https://workspaces.example.com"
+      HTTPS_ENABLED: "false"
+      HTTPS_PORT: "3443"
+      HTTPS_KEY_PATH: "/certs/server.key"
+      HTTPS_CERT_PATH: "/certs/server.crt"
       DOCKER_USE_SUDO: "false"
       DOCKER_SUDO_NON_INTERACTIVE: "true"
     ports:
       - "3000:3000"
+      - "3443:3443"
     volumes:
       - ${DOCKER_SOCKET_PATH:-/var/run/docker.sock}:/var/run/docker.sock
+      - ./certs:/certs:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
 

@@ -9,6 +9,8 @@ const sessionProxyHost = process.env.SESSION_PROXY_HOST || defaultAppHost;
 const dockerUseSudo = process.env.DOCKER_USE_SUDO === "true";
 const dockerCommand = process.env.DOCKER_BIN || "docker";
 const dockerSudoNonInteractive = process.env.DOCKER_SUDO_NON_INTERACTIVE !== "false";
+const defaultExternalProtocol = process.env.APP_PROTOCOL
+  || (process.env.HTTPS_ENABLED === "true" ? "https" : "http");
 
 function shouldUseSudo(options = {}) {
   return dockerUseSudo || Boolean(options.sudoPassword);
@@ -250,7 +252,7 @@ function normalizeBaseUrl(baseUrl) {
 }
 
 function resolveBaseUrl(baseUrl) {
-  return normalizeBaseUrl(baseUrl) || publicBaseUrl || `http://${defaultAppHost}:${process.env.PORT || 3000}`;
+  return normalizeBaseUrl(baseUrl) || publicBaseUrl || `${defaultExternalProtocol}://${defaultAppHost}:${process.env.PORT || 3000}`;
 }
 
 function resolveDirectHost(baseUrl) {
@@ -273,7 +275,7 @@ function buildLocalProxyUrl(sessionName, template, baseUrl) {
     const parsed = new URL(resolvedBaseUrl);
     return `${parsed.protocol}//${parsed.host}${buildWorkspacePath(sessionName, template)}`;
   } catch (_error) {
-    return `http://${sessionProxyHost}:${process.env.PORT || 3000}${buildWorkspacePath(sessionName, template)}`;
+    return `${defaultExternalProtocol}://${sessionProxyHost}:${process.env.PORT || 3000}${buildWorkspacePath(sessionName, template)}`;
   }
 }
 

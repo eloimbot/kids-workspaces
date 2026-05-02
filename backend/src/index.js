@@ -1,5 +1,7 @@
 import express from "express";
+import { readFileSync } from "node:fs";
 import http from "node:http";
+import https from "node:https";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -47,6 +49,10 @@ const sessionCookieName = "kids_workspace_session";
 const app = express();
 const port = Number(process.env.PORT || 3000);
 const host = process.env.HOST || "0.0.0.0";
+const httpsEnabled = process.env.HTTPS_ENABLED === "true";
+const httpsPort = Number(process.env.HTTPS_PORT || port);
+const httpsKeyPath = process.env.HTTPS_KEY_PATH || "";
+const httpsCertPath = process.env.HTTPS_CERT_PATH || "";
 
 app.set("trust proxy", true);
 app.use(express.json());
@@ -473,7 +479,22 @@ app.use((error, _req, res, _next) => {
   });
 });
 
-const server = http.createServer(app);
+function createMainServer() {
+  if (!httpsEnabled) {
+    return http.createServer(app);
+  }
+
+  if (!httpsKeyPath || !httpsCertPath) {
+    throw new Error("HTTPS_ENABLED=true requiere HTTPS_KEY_PATH y HTTPS_CERT_PATH.");
+  }
+
+  return https.createServer({
+    key: readFileSync(httpsKeyPath),
+    cert: readFileSync(httpsCertPath),
+  }, app);
+}
+
+const server = createMainServer();
 
 server.on("upgrade", async (req, socket, head) => {
   try {
@@ -509,6 +530,8 @@ server.on("upgrade", async (req, socket, head) => {
   }
 });
 
-server.listen(port, host, () => {
-  console.log(`Kids Workspaces running on http://${host}:${port}`);
+server.listen(httpsEnabled ? httpsPort : port, host, () => {
+  const protocol = httpsEnabled ? "https" : "http";
+  const listenPort = httpsEnabled ? httpsPort : port;
+  console.log(`Kids Workspaces running on ${protocol}://${host}:${listenPort}`);
 });

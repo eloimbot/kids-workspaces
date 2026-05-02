@@ -332,11 +332,11 @@ function renderSessions() {
         : `${item.image} | ${item.status}`;
 
     const openLink = node.querySelector(".open-link");
-    openLink.href = item.url || "#";
-    openLink.textContent = item.url ? "Open workspace" : "Route unavailable";
+    openLink.href = buildSessionOpenUrl(item);
+    openLink.textContent = buildSessionOpenUrl(item) !== "#" ? "Open workspace" : "Route unavailable";
 
-    node.querySelector(".direct-link").textContent = item.url || item.localUrl || "Sin URL";
-    node.querySelector(".copy-link").addEventListener("click", () => copySessionUrl(item.url || item.localUrl));
+    node.querySelector(".direct-link").textContent = buildSessionCopyUrl(item) || "Sin URL";
+    node.querySelector(".copy-link").addEventListener("click", () => copySessionUrl(buildSessionCopyUrl(item)));
     node.querySelector(".stop-session").addEventListener("click", () => stopSession(item.name));
     sessionsRoot.appendChild(node);
   }
@@ -374,6 +374,26 @@ async function copySessionUrl(url) {
   } catch (_error) {
     alert(`No pude copiar la URL automaticamente: ${url}`);
   }
+}
+
+function buildSessionOpenUrl(session) {
+  if (session?.proxyPath) {
+    return session.proxyPath;
+  }
+
+  return session?.url || "#";
+}
+
+function buildSessionCopyUrl(session) {
+  if (session?.url) {
+    return session.url;
+  }
+
+  if (session?.proxyPath) {
+    return `${window.location.origin}${session.proxyPath}`;
+  }
+
+  return session?.localUrl || "";
 }
 
 async function loadHealth() {

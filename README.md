@@ -92,9 +92,14 @@ http://localhost:3000
 
 - `HOST`: interfaz donde escucha la GUI. Usa `0.0.0.0` para acceso por IP.
 - `PORT`: puerto del panel.
+- `APP_PROTOCOL`: protocolo externo preferido para generar URLs cuando no hay `PUBLIC_BASE_URL`. Usa `https` si quieres que los workspaces se abran por TLS.
 - `APP_HOST`: host usado para URLs locales directas. Por defecto `localhost`.
 - `SESSION_PROXY_HOST`: host al que el backend proxya las sesiones. En Linux con Docker suele ser `host.docker.internal`.
 - `PUBLIC_BASE_URL`: URL publica del panel, por ejemplo `https://workspaces.midominio.com`.
+- `HTTPS_ENABLED=true`: levanta el backend con HTTPS nativo.
+- `HTTPS_PORT`: puerto HTTPS local del portal.
+- `HTTPS_KEY_PATH`: ruta a la clave privada PEM.
+- `HTTPS_CERT_PATH`: ruta al certificado PEM.
 - `DOCKER_USE_SUDO=true`: ejecuta Docker como `sudo docker ...` cuando el host lo requiere.
 - `DOCKER_BIN`: permite cambiar el binario de Docker si no se llama exactamente `docker`.
 - `DOCKER_SUDO_NON_INTERACTIVE=true`: usa `sudo -n` para fallar rapido si sudo pide contrasena.
@@ -113,6 +118,37 @@ Para eso:
 - el servidor escucha en `0.0.0.0`;
 - si no defines `PUBLIC_BASE_URL`, las URLs de la GUI y de los workspaces se generan usando el host real de la peticion;
 - asi los botones ya no fuerzan `localhost` cuando entras por IP.
+
+## Workspaces por HTTPS
+
+Los CT pueden abrirse por `https` desde el punto de vista del usuario aunque internamente el contenedor siga usando `http`.
+
+Esto funciona de dos maneras:
+
+1. Si publicas el portal detras de Cloudflare Tunnel o un reverse proxy HTTPS, los workspaces se abren por la misma ruta `/workspaces/...` y heredan ese `https`.
+2. Si ejecutas la GUI y el backend localmente, ahora puedes activar HTTPS nativo en Node con tu propio certificado.
+
+Ejemplo local:
+
+```bash
+export HTTPS_ENABLED=true
+export HTTPS_PORT=3443
+export HTTPS_KEY_PATH=/ruta/a/server.key
+export HTTPS_CERT_PATH=/ruta/a/server.crt
+export APP_PROTOCOL=https
+```
+
+Luego abre:
+
+```text
+https://TU_IP:3443
+```
+
+Importante:
+
+- el `https` es del portal y del proxy `/workspaces/...`;
+- el backend sigue conectando al contenedor con `http` o `https` segun la plantilla;
+- para la mayoria de imagenes LinuxServer de navegador y desktop, esto es lo correcto.
 
 ## Endpoints principales
 
