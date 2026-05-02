@@ -68,7 +68,9 @@ async function request(url, options) {
 }
 
 async function ensureSudoPassword() {
-  const password = window.prompt("Introduce la contrasena sudo para ejecutar Docker:");
+  const password = window.prompt(
+    "Introduce la contrasena sudo para Docker. Se reutilizara automaticamente durante esta sesion.",
+  );
 
   if (!password) {
     throw new Error("Se necesita la contrasena sudo para continuar.");

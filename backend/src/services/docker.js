@@ -10,15 +10,15 @@ const dockerUseSudo = process.env.DOCKER_USE_SUDO === "true";
 const dockerCommand = process.env.DOCKER_BIN || "docker";
 const dockerSudoNonInteractive = process.env.DOCKER_SUDO_NON_INTERACTIVE !== "false";
 
-function resolveDockerInvocation(args) {
+function resolveDockerInvocation(args, options = {}) {
   if (dockerUseSudo) {
+    const sudoArgs = options.sudoPassword
+      ? ["-S", "-p", ""]
+      : (dockerSudoNonInteractive ? ["-n"] : ["-S", "-p", ""]);
+
     return {
       command: "sudo",
-      args: [
-        ...(dockerSudoNonInteractive ? ["-n"] : ["-S", "-p", ""]),
-        dockerCommand,
-        ...args,
-      ],
+      args: [...sudoArgs, dockerCommand, ...args],
     };
   }
 
@@ -79,7 +79,7 @@ async function runCommand(command, args, options = {}) {
 
 async function runDocker(args, options = {}) {
   try {
-    const invocation = resolveDockerInvocation(args);
+    const invocation = resolveDockerInvocation(args, options);
     const result = await runCommand(invocation.command, invocation.args, {
       stdin: dockerUseSudo && options.sudoPassword ? `${options.sudoPassword}\n` : undefined,
     });
@@ -110,7 +110,11 @@ async function runDocker(args, options = {}) {
 async function tryRunDocker(args, options = {}) {
   try {
     return await runDocker(args, options);
-  } catch (_error) {
+  } catch (error) {
+    if (error.code === "SUDO_PASSWORD_REQUIRED") {
+      throw error;
+    }
+
     return null;
   }
 }
@@ -313,7 +317,7 @@ export async function createSession(templateId, owner, options = {}) {
   const sessionName = buildSessionName(template.id);
   const args = buildDockerArgs(template, sessionName, owner);
 
-  await runDocker(args);
+  await runDocker(args, options);
 
   const row = await getSessionRow(sessionName, false, options);
   const hostPort = row ? parseHostPort(row.Ports) : null;
@@ -342,7 +346,9 @@ export async function deleteSession(name, user) {
     throw httpError("Session name is required", 400);
   }
 
-  const row = await getSessionRow(name, true);
+  const row = await getSessionRow(name, true, {
+    sudoPassword: user?.sudoPassword,
+  });
 
   if (!row) {
     throw httpError("Sesion no encontrada.", 404);

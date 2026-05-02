@@ -213,30 +213,36 @@ export DOCKER_USE_SUDO=true
 
 Importante:
 
-- eso funciona mejor cuando ejecutas la app directamente en el host;
+- eso funciona especialmente bien cuando ejecutas la GUI y el backend directamente en el host;
 - si la app corre dentro de un contenedor, normalmente lo correcto sigue siendo montar bien el socket, no usar `sudo`.
-- si `sudo` pide contrasena, la GUI no puede contestar prompts interactivos.
 
 ### Si sudo pide contrasena
 
-La app ahora usa `sudo -n` por defecto para no quedarse colgada esperando un prompt invisible.
+La app ahora puede pedir la contrasena sudo desde la GUI cuando una operacion Docker la necesita.
 
-Si tu host necesita contrasena para `sudo docker`, tienes tres caminos recomendados:
+El flujo esperado es:
+
+1. El usuario pulsa lanzar, detener o recargar sesiones.
+2. Si el host requiere `sudo docker`, la GUI pide la contrasena una sola vez.
+3. El backend valida esa contrasena con Docker.
+4. Mientras la sesion web siga activa, el backend la reutiliza automaticamente para los siguientes comandos Docker.
+
+Detalles importantes:
+
+- este flujo esta pensado para cuando la GUI y el backend corren localmente en el host Linux;
+- la contrasena se guarda solo en memoria de la sesion web actual;
+- por defecto el backend intenta `sudo -n` cuando aun no tiene contrasena, para detectar rapido que necesita pedirla;
+- en cuanto la contrasena se valida, cambia a `sudo -S` y la inyecta automaticamente en los comandos Docker posteriores.
+
+Si prefieres no depender de una contrasena interactiva en produccion, sigue siendo mejor una de estas opciones:
 
 1. Ejecutar la app con un usuario que ya pertenezca al grupo `docker`.
 2. Configurar una regla `sudoers` limitada para permitir `docker` sin contrasena.
-3. Ejecutar la app fuera de contenedor con un wrapper propio si quieres manejar la autenticacion manualmente.
 
 Ejemplo de `sudoers` limitado:
 
 ```text
 tu_usuario ALL=(ALL) NOPASSWD: /usr/bin/docker
-```
-
-Luego:
-
-```bash
-export DOCKER_USE_SUDO=true
 ```
 
 ### Si usas Docker rootless
