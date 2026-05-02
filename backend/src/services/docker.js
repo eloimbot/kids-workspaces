@@ -1,51 +1,123 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
+import { spawn } from "node:child_process";
 import crypto from "node:crypto";
 import { findTemplateById } from "./templates.js";
 
-const execFileAsync = promisify(execFile);
 const managedLabel = "kids.workspace.managed=true";
-const appHost = process.env.APP_HOST || "localhost";
 const publicBaseUrl = (process.env.PUBLIC_BASE_URL || "").replace(/\/$/, "");
-const sessionProxyHost = process.env.SESSION_PROXY_HOST || appHost;
+const defaultAppHost = process.env.APP_HOST || "localhost";
+const sessionProxyHost = process.env.SESSION_PROXY_HOST || defaultAppHost;
+const dockerUseSudo = process.env.DOCKER_USE_SUDO === "true";
+const dockerCommand = process.env.DOCKER_BIN || "docker";
+const dockerSudoNonInteractive = process.env.DOCKER_SUDO_NON_INTERACTIVE !== "false";
 
-function httpError(message, statusCode = 500) {
+function resolveDockerInvocation(args) {
+  if (dockerUseSudo) {
+    return {
+      command: "sudo",
+      args: [
+        ...(dockerSudoNonInteractive ? ["-n"] : ["-S", "-p", ""]),
+        dockerCommand,
+        ...args,
+      ],
+    };
+  }
+
+  return {
+    command: dockerCommand,
+    args,
+  };
+}
+
+function httpError(message, statusCode = 500, code = undefined) {
   const error = new Error(message);
   error.statusCode = statusCode;
+  if (code) {
+    error.code = code;
+  }
   return error;
 }
 
-async function runDocker(args) {
-  try {
-    const result = await execFileAsync("docker", args, {
+async function runCommand(command, args, options = {}) {
+  return await new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
       windowsHide: true,
+      stdio: "pipe",
+    });
+    let stdout = "";
+    let stderr = "";
+
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString();
+    });
+
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+
+    child.on("error", reject);
+
+    child.on("close", (code) => {
+      if (code === 0) {
+        resolve({ stdout, stderr });
+        return;
+      }
+
+      const error = new Error(stderr || `Command failed with exit code ${code}`);
+      error.code = code;
+      error.stderr = stderr;
+      error.stdout = stdout;
+      reject(error);
+    });
+
+    if (options.stdin) {
+      child.stdin.write(options.stdin);
+    }
+
+    child.stdin.end();
+  });
+}
+
+async function runDocker(args, options = {}) {
+  try {
+    const invocation = resolveDockerInvocation(args);
+    const result = await runCommand(invocation.command, invocation.args, {
+      stdin: dockerUseSudo && options.sudoPassword ? `${options.sudoPassword}\n` : undefined,
     });
 
     return result.stdout.trim();
   } catch (error) {
     if (error.code === "ENOENT") {
       throw httpError(
-        "Docker no esta disponible en PATH. Instala Docker Desktop o ajusta tu PATH.",
+        dockerUseSudo
+          ? "No encontre sudo o docker en PATH. Revisa DOCKER_USE_SUDO, DOCKER_BIN y tu entorno."
+          : "Docker no esta disponible en PATH. Instala Docker Desktop o ajusta tu PATH.",
         500,
       );
     }
 
     const details = error.stderr?.trim() || error.message;
+    if (dockerUseSudo && /sudo:.*password|a password is required|sudoers|not allowed to execute/i.test(details)) {
+      throw httpError(
+        "Docker requiere contrasena sudo para continuar.",
+        401,
+        "SUDO_PASSWORD_REQUIRED",
+      );
+    }
     throw httpError(`Docker fallo: ${details}`, 500);
   }
 }
 
-async function tryRunDocker(args) {
+async function tryRunDocker(args, options = {}) {
   try {
-    return await runDocker(args);
+    return await runDocker(args, options);
   } catch (_error) {
     return null;
   }
 }
 
-export async function probeDocker() {
+export async function probeDocker(options = {}) {
   try {
-    await runDocker(["version", "--format", "{{.Server.Version}}"]);
+    await runDocker(["version", "--format", "{{.Server.Version}}"], options);
     return true;
   } catch (_error) {
     return false;
@@ -63,13 +135,36 @@ function buildWorkspacePath(sessionName, template) {
   return nestedPath ? `${basePath}${nestedPath}` : `${basePath}/`;
 }
 
-function buildPublicUrl(sessionName, template) {
-  const path = buildWorkspacePath(sessionName, template);
-  return publicBaseUrl ? `${publicBaseUrl}${path}` : `http://${appHost}:${process.env.PORT || 3000}${path}`;
+function normalizeBaseUrl(baseUrl) {
+  return String(baseUrl || "").replace(/\/$/, "");
 }
 
-function buildLocalProxyUrl(sessionName, template) {
-  return `http://${sessionProxyHost}:${process.env.PORT || 3000}${buildWorkspacePath(sessionName, template)}`;
+function resolveBaseUrl(baseUrl) {
+  return normalizeBaseUrl(baseUrl) || publicBaseUrl || `http://${defaultAppHost}:${process.env.PORT || 3000}`;
+}
+
+function resolveDirectHost(baseUrl) {
+  try {
+    return new URL(resolveBaseUrl(baseUrl)).hostname;
+  } catch (_error) {
+    return defaultAppHost;
+  }
+}
+
+function buildPublicUrl(sessionName, template, baseUrl) {
+  const path = buildWorkspacePath(sessionName, template);
+  return `${resolveBaseUrl(baseUrl)}${path}`;
+}
+
+function buildLocalProxyUrl(sessionName, template, baseUrl) {
+  const resolvedBaseUrl = resolveBaseUrl(baseUrl);
+
+  try {
+    const parsed = new URL(resolvedBaseUrl);
+    return `${parsed.protocol}//${parsed.host}${buildWorkspacePath(sessionName, template)}`;
+  } catch (_error) {
+    return `http://${sessionProxyHost}:${process.env.PORT || 3000}${buildWorkspacePath(sessionName, template)}`;
+  }
 }
 
 function buildDockerArgs(template, sessionName, owner) {
@@ -131,12 +226,13 @@ function parseLabelValue(labelsValue, prefix) {
     ?.slice(prefix.length) || null;
 }
 
-function mapSessionRow(row) {
+function mapSessionRow(row, baseUrl) {
   const hostPort = parseHostPort(row.Ports);
   const templateId = parseTemplateId(row.Labels);
   const proxyPath = `/workspaces/${row.Names}/`;
   const protocol = parseLabelValue(row.Labels, "kids.workspace.protocol=") || "http";
   const internalPort = Number(parseLabelValue(row.Labels, "kids.workspace.internalPort=") || 3000);
+  const directHost = resolveDirectHost(baseUrl);
 
   return {
     id: row.ID,
@@ -151,13 +247,13 @@ function mapSessionRow(row) {
     state: row.State,
     status: row.Status,
     hostPort,
-    url: publicBaseUrl ? `${publicBaseUrl}${proxyPath}` : buildLocalProxyUrl(row.Names, null),
-    localUrl: hostPort ? `${protocol}://${appHost}:${hostPort}` : null,
+    url: buildLocalProxyUrl(row.Names, null, baseUrl),
+    localUrl: hostPort ? `${protocol}://${directHost}:${hostPort}` : null,
     proxyPath,
   };
 }
 
-async function getSessionRow(name, includeStopped = false) {
+async function getSessionRow(name, includeStopped = false, options = {}) {
   const command = includeStopped ? "ps" : "ps";
   const args = [
     command,
@@ -169,7 +265,7 @@ async function getSessionRow(name, includeStopped = false) {
     "--format",
     "{{json .}}",
   ];
-  const stdout = await tryRunDocker(args);
+  const stdout = await tryRunDocker(args, options);
 
   if (!stdout) {
     return null;
@@ -186,13 +282,15 @@ export async function listSessions(user, options = {}) {
     `label=${managedLabel}`,
     "--format",
     "{{json .}}",
-  ]);
+  ], options);
 
   if (!stdout) {
     return [];
   }
 
-  const sessions = stdout.split(/\r?\n/).map((line) => mapSessionRow(JSON.parse(line)));
+  const sessions = stdout
+    .split(/\r?\n/)
+    .map((line) => mapSessionRow(JSON.parse(line), options.baseUrl));
 
   if (options.includeAll || user?.role === "admin") {
     return sessions;
@@ -201,7 +299,7 @@ export async function listSessions(user, options = {}) {
   return sessions.filter((session) => session.ownerId === user?.id);
 }
 
-export async function createSession(templateId, owner) {
+export async function createSession(templateId, owner, options = {}) {
   const template = await findTemplateById(templateId);
 
   if (!template) {
@@ -217,7 +315,7 @@ export async function createSession(templateId, owner) {
 
   await runDocker(args);
 
-  const row = await getSessionRow(sessionName);
+  const row = await getSessionRow(sessionName, false, options);
   const hostPort = row ? parseHostPort(row.Ports) : null;
 
   if (!hostPort) {
@@ -234,8 +332,8 @@ export async function createSession(templateId, owner) {
     internalPort: Number(template.containerPort || 3000),
     hostPort,
     proxyPath: buildWorkspacePath(sessionName, template),
-    url: buildPublicUrl(sessionName, template),
-    localUrl: `${template.protocol === "https" ? "https" : "http"}://${appHost}:${hostPort}${template.urlPath || "/"}`,
+    url: buildPublicUrl(sessionName, template, options.baseUrl),
+    localUrl: `${template.protocol === "https" ? "https" : "http"}://${resolveDirectHost(options.baseUrl)}:${hostPort}${template.urlPath || "/"}`,
   };
 }
 
@@ -256,7 +354,9 @@ export async function deleteSession(name, user) {
     throw httpError("No tienes permisos para detener esta sesion.", 403);
   }
 
-  await runDocker(["rm", "-f", name]);
+  await runDocker(["rm", "-f", name], {
+    sudoPassword: user?.sudoPassword,
+  });
 }
 
 export async function getSessionTarget(name, user) {
@@ -264,7 +364,9 @@ export async function getSessionTarget(name, user) {
     return null;
   }
 
-  const row = await getSessionRow(name);
+  const row = await getSessionRow(name, false, {
+    sudoPassword: user?.sudoPassword,
+  });
 
   if (!row) {
     return null;

@@ -21,7 +21,12 @@ import {
   probeDocker,
 } from "./services/docker.js";
 import { proxyHttpRequest, proxyWsRequest } from "./services/proxy.js";
-import { createWebSession, destroyWebSession, getWebSession } from "./services/webSessions.js";
+import {
+  createWebSession,
+  destroyWebSession,
+  getWebSession,
+  setWebSessionSudoPassword,
+} from "./services/webSessions.js";
 import { buildCookie, parseCookies } from "./utils/cookies.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -31,7 +36,9 @@ const sessionCookieName = "kids_workspace_session";
 
 const app = express();
 const port = Number(process.env.PORT || 3000);
+const host = process.env.HOST || "0.0.0.0";
 
+app.set("trust proxy", true);
 app.use(express.json());
 app.use((req, _res, next) => {
   const cookies = parseCookies(req.headers.cookie);
@@ -40,9 +47,24 @@ app.use((req, _res, next) => {
 
   req.sessionToken = sessionToken || null;
   req.currentUser = session?.user ?? null;
+  req.currentWebSession = session ?? null;
   next();
 });
 app.use(express.static(frontendPath));
+
+function getRequestBaseUrl(req) {
+  if (process.env.PUBLIC_BASE_URL) {
+    return process.env.PUBLIC_BASE_URL;
+  }
+
+  const forwardedProto = req.headers["x-forwarded-proto"];
+  const protocol = Array.isArray(forwardedProto)
+    ? forwardedProto[0]
+    : (forwardedProto || req.protocol || "http");
+  const requestHost = req.headers["x-forwarded-host"] || req.get("host");
+
+  return `${protocol}://${requestHost}`;
+}
 
 function requireAuth(req, _res, next) {
   if (!req.currentUser) {
@@ -95,10 +117,38 @@ app.get("/api/auth/me", (req, res) => {
   res.json({ user: req.currentUser });
 });
 
-app.get("/api/health", async (_req, res, next) => {
+app.post("/api/auth/sudo-password", requireAuth, async (req, res, next) => {
+  try {
+    const { password } = req.body ?? {};
+
+    if (!password) {
+      res.status(400).json({ error: "password is required" });
+      return;
+    }
+
+    const dockerReady = await probeDocker({ sudoPassword: password });
+
+    if (!dockerReady) {
+      res.status(401).json({
+        error: "La contrasena sudo no funciono o Docker sigue inaccesible.",
+        code: "SUDO_PASSWORD_INVALID",
+      });
+      return;
+    }
+
+    setWebSessionSudoPassword(req.sessionToken, password);
+    res.status(204).send();
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/health", async (req, res, next) => {
   try {
     const templates = await loadTemplates();
-    const dockerReady = await probeDocker();
+    const dockerReady = await probeDocker({
+      sudoPassword: req.currentWebSession?.sudoPassword,
+    });
 
     res.json({
       ok: true,
@@ -151,7 +201,10 @@ app.post("/api/catalog/linuxserver/:catalogId/install", requireAdmin, async (req
 
 app.get("/api/sessions", requireAuth, async (req, res, next) => {
   try {
-    const sessions = await listSessions(req.currentUser);
+    const sessions = await listSessions(req.currentUser, {
+      baseUrl: getRequestBaseUrl(req),
+      sudoPassword: req.currentWebSession?.sudoPassword,
+    });
     res.json({ items: sessions });
   } catch (error) {
     next(error);
@@ -167,7 +220,10 @@ app.post("/api/sessions", requireAuth, async (req, res, next) => {
       return;
     }
 
-    const session = await createSession(templateId, req.currentUser);
+    const session = await createSession(templateId, req.currentUser, {
+      baseUrl: getRequestBaseUrl(req),
+      sudoPassword: req.currentWebSession?.sudoPassword,
+    });
     res.status(201).json(session);
   } catch (error) {
     next(error);
@@ -176,7 +232,10 @@ app.post("/api/sessions", requireAuth, async (req, res, next) => {
 
 app.delete("/api/sessions/:name", requireAuth, async (req, res, next) => {
   try {
-    await deleteSession(req.params.name, req.currentUser);
+    await deleteSession(req.params.name, {
+      ...req.currentUser,
+      sudoPassword: req.currentWebSession?.sudoPassword,
+    });
     res.status(204).send();
   } catch (error) {
     next(error);
@@ -203,7 +262,10 @@ app.post("/api/users", requireAdmin, async (req, res, next) => {
 
 app.use("/workspaces/:name", requireAuth, async (req, res, next) => {
   try {
-    const target = await getSessionTarget(req.params.name, req.currentUser);
+    const target = await getSessionTarget(req.params.name, {
+      ...req.currentUser,
+      sudoPassword: req.currentWebSession?.sudoPassword,
+    });
 
     if (!target) {
       res.status(404).json({ error: "Workspace no encontrado" });
@@ -228,6 +290,7 @@ app.get("*", (_req, res) => {
 app.use((error, _req, res, _next) => {
   const status = error.statusCode || 500;
   res.status(status).json({
+    code: error.code || null,
     error: error.message || "Unexpected server error",
   });
 });
@@ -252,7 +315,10 @@ server.on("upgrade", async (req, socket, head) => {
     }
 
     const name = decodeURIComponent(match[1]);
-    const target = await getSessionTarget(name, session.user);
+    const target = await getSessionTarget(name, {
+      ...session.user,
+      sudoPassword: session.sudoPassword,
+    });
 
     if (!target) {
       socket.destroy();
@@ -265,6 +331,6 @@ server.on("upgrade", async (req, socket, head) => {
   }
 });
 
-server.listen(port, () => {
-  console.log(`Kids Workspaces running on http://localhost:${port}`);
+server.listen(port, host, () => {
+  console.log(`Kids Workspaces running on http://${host}:${port}`);
 });

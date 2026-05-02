@@ -56,6 +56,7 @@ async function request(url, options) {
     const payload = await response.json().catch(() => ({}));
     const error = new Error(payload.error || `Request failed: ${response.status}`);
     error.status = response.status;
+    error.code = payload.code || null;
     throw error;
   }
 
@@ -64,6 +65,33 @@ async function request(url, options) {
   }
 
   return response.json();
+}
+
+async function ensureSudoPassword() {
+  const password = window.prompt("Introduce la contrasena sudo para ejecutar Docker:");
+
+  if (!password) {
+    throw new Error("Se necesita la contrasena sudo para continuar.");
+  }
+
+  await request("/api/auth/sudo-password", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ password }),
+  });
+}
+
+async function runWithSudoPrompt(operation) {
+  try {
+    return await operation();
+  } catch (error) {
+    if (error.code !== "SUDO_PASSWORD_REQUIRED") {
+      throw error;
+    }
+
+    await ensureSudoPassword();
+    return operation();
+  }
 }
 
 function showLogin() {
@@ -323,7 +351,7 @@ async function loadSessions() {
   sessionsRoot.appendChild(createEmptyState("Consultando sesiones", "Recuperando workspaces asignados."));
 
   try {
-    const data = await request("/api/sessions");
+    const data = await runWithSudoPrompt(() => request("/api/sessions"));
     state.sessions = data.items;
     setTopLevelStatus();
     renderSessions();
@@ -388,11 +416,11 @@ async function logout() {
 
 async function launchSession(templateId) {
   try {
-    await request("/api/sessions", {
+    await runWithSudoPrompt(() => request("/api/sessions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ templateId }),
-    });
+    }));
     await Promise.all([loadSessions(), loadTemplates()]);
   } catch (error) {
     alert(error.message);
@@ -401,7 +429,7 @@ async function launchSession(templateId) {
 
 async function stopSession(name) {
   try {
-    await request(`/api/sessions/${name}`, { method: "DELETE" });
+    await runWithSudoPrompt(() => request(`/api/sessions/${name}`, { method: "DELETE" }));
     await Promise.all([loadSessions(), loadTemplates()]);
   } catch (error) {
     alert(error.message);

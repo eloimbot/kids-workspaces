@@ -87,11 +87,29 @@ http://localhost:3000
 
 ## Variables utiles
 
+- `HOST`: interfaz donde escucha la GUI. Usa `0.0.0.0` para acceso por IP.
 - `PORT`: puerto del panel.
 - `APP_HOST`: host usado para URLs locales directas. Por defecto `localhost`.
 - `SESSION_PROXY_HOST`: host al que el backend proxya las sesiones. En Linux con Docker suele ser `host.docker.internal`.
 - `PUBLIC_BASE_URL`: URL publica del panel, por ejemplo `https://workspaces.midominio.com`.
+- `DOCKER_USE_SUDO=true`: ejecuta Docker como `sudo docker ...` cuando el host lo requiere.
+- `DOCKER_BIN`: permite cambiar el binario de Docker si no se llama exactamente `docker`.
+- `DOCKER_SUDO_NON_INTERACTIVE=true`: usa `sudo -n` para fallar rapido si sudo pide contrasena.
 - `NODE_ENV=production`: activa cookies `Secure`.
+
+## Acceso por IP
+
+La GUI ahora puede usarse por IP de la maquina, por ejemplo:
+
+```text
+http://192.168.1.50:3000
+```
+
+Para eso:
+
+- el servidor escucha en `0.0.0.0`;
+- si no defines `PUBLIC_BASE_URL`, las URLs de la GUI y de los workspaces se generan usando el host real de la peticion;
+- asi los botones ya no fuerzan `localhost` cuando entras por IP.
 
 ## Endpoints principales
 
@@ -156,6 +174,105 @@ Detalles importantes:
 - El servicio principal monta `/var/run/docker.sock` para crear y parar contenedores.
 - `host.docker.internal:host-gateway` permite que el proxy dentro del contenedor llegue a los puertos publicados en el host Linux.
 - Cloudflare solo necesita publicar el panel en el puerto `3000`; las sesiones viajan por rutas internas del mismo dominio.
+
+## Error comun con Docker socket
+
+Si al lanzar una sesion ves algo como:
+
+```text
+Docker fallo: permission denied while trying to connect to the docker API at unix:///var/run/docker.sock
+```
+
+normalmente significa una de estas cosas:
+
+1. La app corre dentro de Docker pero el socket montado no es el correcto.
+2. Tu host usa Docker rootless y el socket real no esta en `/var/run/docker.sock`.
+3. Estas ejecutando la app fuera de contenedor y tu usuario no pertenece al grupo `docker`.
+4. Tu host permite Docker solo mediante `sudo docker`.
+
+### Si usas Docker normal en Linux
+
+Comprueba:
+
+```bash
+ls -l /var/run/docker.sock
+```
+
+Y si ejecutas la app directamente en el host:
+
+```bash
+sudo usermod -aG docker $USER
+newgrp docker
+```
+
+Si en tu entorno prefieres no cambiar grupos y Docker solo funciona con `sudo`, puedes arrancar la app con:
+
+```bash
+export DOCKER_USE_SUDO=true
+```
+
+Importante:
+
+- eso funciona mejor cuando ejecutas la app directamente en el host;
+- si la app corre dentro de un contenedor, normalmente lo correcto sigue siendo montar bien el socket, no usar `sudo`.
+- si `sudo` pide contrasena, la GUI no puede contestar prompts interactivos.
+
+### Si sudo pide contrasena
+
+La app ahora usa `sudo -n` por defecto para no quedarse colgada esperando un prompt invisible.
+
+Si tu host necesita contrasena para `sudo docker`, tienes tres caminos recomendados:
+
+1. Ejecutar la app con un usuario que ya pertenezca al grupo `docker`.
+2. Configurar una regla `sudoers` limitada para permitir `docker` sin contrasena.
+3. Ejecutar la app fuera de contenedor con un wrapper propio si quieres manejar la autenticacion manualmente.
+
+Ejemplo de `sudoers` limitado:
+
+```text
+tu_usuario ALL=(ALL) NOPASSWD: /usr/bin/docker
+```
+
+Luego:
+
+```bash
+export DOCKER_USE_SUDO=true
+```
+
+### Si usas Docker rootless
+
+Primero localiza tu socket real:
+
+```bash
+echo $XDG_RUNTIME_DIR
+ls -l $XDG_RUNTIME_DIR/docker.sock
+```
+
+Luego arranca el stack indicando ese socket:
+
+```bash
+export DOCKER_SOCKET_PATH=$XDG_RUNTIME_DIR/docker.sock
+docker compose -f docker-compose.linux.yml up -d --build
+```
+
+El `docker-compose.linux.yml` ya esta preparado para eso usando:
+
+```text
+${DOCKER_SOCKET_PATH:-/var/run/docker.sock}:/var/run/docker.sock
+```
+
+### Si sigue fallando dentro del contenedor
+
+Comprueba desde el host:
+
+```bash
+docker exec -it kids-workspaces sh
+whoami
+ls -l /var/run/docker.sock
+docker version
+```
+
+Si `docker version` falla dentro del contenedor, entonces el problema sigue siendo el socket o sus permisos en el host, no la GUI.
 
 ## Siguiente paso recomendado
 

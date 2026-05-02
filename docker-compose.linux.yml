@@ -6,14 +6,17 @@ services:
     container_name: kids-workspaces
     restart: unless-stopped
     environment:
+      HOST: "0.0.0.0"
       PORT: "3000"
       APP_HOST: "127.0.0.1"
       SESSION_PROXY_HOST: "host.docker.internal"
       PUBLIC_BASE_URL: "https://workspaces.example.com"
+      DOCKER_USE_SUDO: "false"
+      DOCKER_SUDO_NON_INTERACTIVE: "true"
     ports:
       - "3000:3000"
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
+      - ${DOCKER_SOCKET_PATH:-/var/run/docker.sock}:/var/run/docker.sock
     extra_hosts:
       - "host.docker.internal:host-gateway"
 

@@ -19,6 +19,7 @@ export function createWebSession(user) {
   const token = crypto.randomBytes(24).toString("hex");
   sessions.set(token, {
     user,
+    sudoPassword: null,
     expiresAt: Date.now() + sessionLifetimeSeconds * 1000,
   });
 
@@ -53,4 +54,14 @@ export function destroyWebSession(token) {
   if (token) {
     sessions.delete(token);
   }
+}
+
+export function setWebSessionSudoPassword(token, sudoPassword) {
+  if (!token || !sessions.has(token)) {
+    return false;
+  }
+
+  const session = sessions.get(token);
+  session.sudoPassword = sudoPassword;
+  return true;
 }
