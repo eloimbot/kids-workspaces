@@ -10,8 +10,12 @@ const dockerUseSudo = process.env.DOCKER_USE_SUDO === "true";
 const dockerCommand = process.env.DOCKER_BIN || "docker";
 const dockerSudoNonInteractive = process.env.DOCKER_SUDO_NON_INTERACTIVE !== "false";
 
+function shouldUseSudo(options = {}) {
+  return dockerUseSudo || Boolean(options.sudoPassword);
+}
+
 function resolveDockerInvocation(args, options = {}) {
-  if (dockerUseSudo) {
+  if (shouldUseSudo(options)) {
     const sudoArgs = options.sudoPassword
       ? ["-S", "-p", ""]
       : (dockerSudoNonInteractive ? ["-n"] : ["-S", "-p", ""]);
@@ -81,14 +85,14 @@ async function runDocker(args, options = {}) {
   try {
     const invocation = resolveDockerInvocation(args, options);
     const result = await runCommand(invocation.command, invocation.args, {
-      stdin: dockerUseSudo && options.sudoPassword ? `${options.sudoPassword}\n` : undefined,
+      stdin: shouldUseSudo(options) && options.sudoPassword ? `${options.sudoPassword}\n` : undefined,
     });
 
     return result.stdout.trim();
   } catch (error) {
     if (error.code === "ENOENT") {
       throw httpError(
-        dockerUseSudo
+        shouldUseSudo(options)
           ? "No encontre sudo o docker en PATH. Revisa DOCKER_USE_SUDO, DOCKER_BIN y tu entorno."
           : "Docker no esta disponible en PATH. Instala Docker Desktop o ajusta tu PATH.",
         500,
@@ -96,9 +100,16 @@ async function runDocker(args, options = {}) {
     }
 
     const details = error.stderr?.trim() || error.message;
-    if (dockerUseSudo && /sudo:.*password|a password is required|sudoers|not allowed to execute/i.test(details)) {
+    const sudoPasswordRequired =
+      shouldUseSudo(options)
+      && /sudo:.*password|a password is required|sudoers|not allowed to execute/i.test(details);
+    const dockerSocketPermissionDenied =
+      !shouldUseSudo(options)
+      && /permission denied while trying to connect to the docker api|got permission denied while trying to connect to the docker daemon socket|permission denied.*\/var\/run\/docker\.sock/i.test(details);
+
+    if (sudoPasswordRequired || dockerSocketPermissionDenied) {
       throw httpError(
-        "Docker requiere contrasena sudo para continuar.",
+        "Docker requiere permisos sudo para continuar.",
         401,
         "SUDO_PASSWORD_REQUIRED",
       );
