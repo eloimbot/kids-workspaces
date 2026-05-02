@@ -39,6 +39,8 @@ export function proxyHttpRequest(req, res, target, workspaceName) {
   });
 }
 
-export function proxyWsRequest(req, socket, head, target) {
+export function proxyWsRequest(req, socket, head, target, workspaceName) {
+  req.url = normalizeWorkspacePath(req.url, workspaceName);
+
   proxy.ws(req, socket, head, { target });
 }

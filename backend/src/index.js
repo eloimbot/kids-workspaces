@@ -524,7 +524,7 @@ server.on("upgrade", async (req, socket, head) => {
       return;
     }
 
-    proxyWsRequest(req, socket, head, target);
+    proxyWsRequest(req, socket, head, target, name);
   } catch (_error) {
     socket.destroy();
   }
